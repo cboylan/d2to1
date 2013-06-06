@@ -33,6 +33,7 @@ from setuptools.dist import Distribution
 from setuptools.extension import Extension
 
 from .extern.six import moves as m
+from .extern.markerlib import as_function as marker_compile
 RawConfigParser = m.configparser.RawConfigParser
 
 
@@ -270,12 +271,21 @@ def setup_cfg_to_setup_kwargs(config):
             in_cfg_value = split_csv(in_cfg_value)
         if arg in MULTI_FIELDS:
             in_cfg_value = split_multiline(in_cfg_value)
+            values = []
+            for value in in_cfg_value:
+                option = handle_env_markers(value)
+                if option:
+                    values.append(option)
+            in_cfg_value = values
         elif arg in BOOL_FIELDS:
+            in_cfg_value = handle_env_markers(in_cfg_value)
             # Provide some flexibility here...
             if in_cfg_value.lower() in ('true', 't', '1', 'yes', 'y'):
                 in_cfg_value = True
             else:
                 in_cfg_value = False
+        elif arg != "long_description":
+            in_cfg_value = handle_env_markers(in_cfg_value)
 
         if in_cfg_value:
             if arg in ('install_requires', 'tests_require'):
@@ -507,6 +517,17 @@ def run_command_hooks(cmd_obj, hook_kind):
             log.error('hook %s raised exception: %s\n' % (hook, e))
             log.error(traceback.format_exc())
             sys.exit(1)
+
+
+def handle_env_markers(option):
+    split = option.split(';', 1)
+    if len(split) > 1:
+        marker = marker_compile(split[1])
+        if marker():
+            return split[0]
+        return False
+    else:
+        return option
 
 
 def has_get_option(config, section, option):
